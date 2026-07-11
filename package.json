@@ -1,0 +1,57 @@
+{
+  "name": "instrument-identifiers",
+  "version": "1.0.0",
+  "description": "Securities identifier math in one package — validate, parse, and compute check digits for CUSIP, ISIN, SEDOL, FIGI, and LEI, plus CUSIP→ISIN and SEDOL→ISIN conversion. Zero dependencies.",
+  "keywords": [
+    "cusip",
+    "isin",
+    "sedol",
+    "figi",
+    "lei",
+    "check-digit",
+    "securities",
+    "identifiers",
+    "finance",
+    "fixed-income",
+    "validation",
+    "iso-6166",
+    "iso-7064"
+  ],
+  "homepage": "https://moshemalka.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/moshejs/instrument-identifiers.git"
+  },
+  "bugs": "https://github.com/moshejs/instrument-identifiers/issues",
+  "author": "Moshe Malka <hello@moshemalka.com> (https://moshemalka.com)",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts --clean",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run typecheck && npm run test && npm run build"
+  },
+  "devDependencies": {
+    "tsup": "^8.5.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.2.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
