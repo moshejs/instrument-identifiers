@@ -1,104 +1,70 @@
 #!/usr/bin/env python3
-"""Independent reference implementation of the five check-digit algorithms.
+"""Reference fixtures for instrument-identifiers, from python-stdnum.
 
-Generates test/fixtures.json for the vitest suite — written separately from
-the TypeScript, straight from the published specs, as a transcription guard.
+Valid identifiers are generated with the correct structure and stdnum's check
+digit functions (stdnum.cusip, stdnum.isin, stdnum.gb.sedol, stdnum.figi,
+stdnum.iso7064.mod_97_10). `verdicts` holds random, valid, and single-character
+corrupted strings with stdnum's is_valid() verdict, with three documented
+deviations where this package follows the primary spec instead:
+
+- FIGI: stdnum excludes BS/BM/GG/GB/VG prefixes; the OMG spec also excludes GH
+  and KY (OMG issue FIGI-6), so those are marked invalid here.
+- LEI: stdnum accepts letters in the two check positions; ISO 17442 check
+  digits are numeric (02-98), so those are marked invalid here.
+- ISIN: stdnum checks the country prefix; both verdicts are stored
+  (`valid` = checksum + format only, `validCountry` = stdnum's).
+
+Usage: python -I test/generate-fixtures.py   (needs python-stdnum)
+Writes test/fixtures.json.
 """
 import json
 import random
 
+import stdnum
+from stdnum import cusip, figi, isin, lei
+from stdnum.gb import sedol
+from stdnum.iso7064 import mod_97_10
+
 random.seed(1452)
 
-CUSIP_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ*@#"
+AN = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+DIGITS = "0123456789"
 CONSONANTS = "BCDFGHJKLMNPQRSTVWXYZ"
+FIGI_EXCLUDED = {"BS", "BM", "GG", "GB", "GH", "KY", "VG"}
 
 
-def val(ch):
-    if ch.isdigit():
-        return int(ch)
-    if ch.isalpha():
-        return ord(ch) - 55
-    return {"*": 36, "@": 37, "#": 38}[ch]
+def rs(alphabet, n):
+    return "".join(random.choice(alphabet) for _ in range(n))
 
 
-def digit_sum(n):
-    return sum(int(d) for d in str(n))
-
-
-def cusip_cd(base8):
-    total = 0
-    for i, ch in enumerate(base8):
-        v = val(ch)
-        if i % 2 == 1:
-            v *= 2
-        total += digit_sum(v)
-    return (10 - total % 10) % 10
-
-
-def isin_cd(payload11):
-    digits = "".join(str(val(c)) for c in payload11)
-    total = 0
-    for i, ch in enumerate(reversed(digits)):
-        v = int(ch)
-        if i % 2 == 0:
-            v *= 2
-        total += digit_sum(v)
-    return (10 - total % 10) % 10
-
-
-def sedol_cd(base6):
-    weights = [1, 3, 1, 7, 3, 9]
-    total = sum(val(c) * w for c, w in zip(base6, weights))
-    return (10 - total % 10) % 10
-
-
-def figi_cd(base11):
-    total = 0
-    for i, ch in enumerate(base11):
-        v = val(ch)
-        if i % 2 == 1:
-            v *= 2
-        total += digit_sum(v)
-    return (10 - total % 10) % 10
-
-
-def lei_check_digits(base18):
-    expanded = "".join(str(val(c)) for c in base18) + "00"
-    return f"{98 - int(expanded) % 97:02d}"
-
-
-def lei_valid(lei20):
-    return int("".join(str(val(c)) for c in lei20)) % 97 == 1
+def corrupt(s):
+    i = random.randrange(len(s))
+    return s[:i] + random.choice(AN + "*@#") + s[i + 1:]
 
 
 fixtures = {"cusip": [], "isin": [], "sedol": [], "figi": [], "lei": []}
-
-for _ in range(60):
-    base = "".join(random.choice("0123456789ABCDEFGHIJKLMNPQRSTUVWXYZ") for _ in range(8))
-    fixtures["cusip"].append(base + str(cusip_cd(base)))
-for _ in range(60):
-    cc = "".join(random.choice("ABCDEFGHIJKLMNOPQRSTUVWXYZ") for _ in range(2))
-    nsin = "".join(random.choice("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ") for _ in range(9))
-    p = cc + nsin
-    fixtures["isin"].append(p + str(isin_cd(p)))
-for _ in range(60):
-    base = "".join(random.choice("0123456789" + CONSONANTS) for _ in range(6))
-    fixtures["sedol"].append(base + str(sedol_cd(base)))
-for _ in range(60):
+for _ in range(100):
+    b = rs(AN, 6) + rs(AN + "*@#", 2)
+    fixtures["cusip"].append(b + cusip.calc_check_digit(b))
+    p = random.choice(["US", "GB", "DE", "FR", "JP", "XS", "CH", "CA", "AU", "KY"]) + rs(AN, 9)
+    fixtures["isin"].append(p + isin.calc_check_digit(p))
+    b = rs(DIGITS, 6) if random.random() < 0.4 else random.choice(CONSONANTS) + rs(DIGITS + CONSONANTS, 5)
+    fixtures["sedol"].append(b + sedol.calc_check_digit(b))
     while True:
-        prefix = "".join(random.choice(CONSONANTS + "0123456789") for _ in range(2))
-        if prefix not in {"BS", "BM", "GG", "GB", "GH", "KY", "VG"}:
+        prefix = rs(CONSONANTS, 2)
+        if prefix not in FIGI_EXCLUDED:
             break
-    body = "".join(random.choice(CONSONANTS + "0123456789") for _ in range(8))
-    base = prefix + "G" + body
-    fixtures["figi"].append(base + str(figi_cd(base)))
-for _ in range(60):
-    base = "".join(random.choice("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ") for _ in range(18))
-    lei = base + lei_check_digits(base)
-    assert lei_valid(lei)
-    fixtures["lei"].append(lei)
+    b = prefix + "G" + rs(CONSONANTS + DIGITS, 8)
+    fixtures["figi"].append(b + figi.calc_check_digit(b))
+    b = rs(AN, 18)
+    fixtures["lei"].append(b + mod_97_10.calc_check_digits(b))
 
-# Real-world identifiers, verified against this reference implementation.
+for kind, check in [("cusip", cusip.is_valid), ("isin", isin.is_valid), ("sedol", sedol.is_valid),
+                    ("figi", figi.is_valid), ("lei", lei.is_valid)]:
+    for v in fixtures[kind]:
+        assert check(v), (kind, v)
+
+# Real-world identifiers (confirmed against GLEIF / TreasuryDirect / issuer data).
 real = {
     "cusip": ["037833100", "91282CQQ7", "594918104", "38259P508"],
     "isin": ["US0378331005", "US5949181045", "GB0002634946", "DE000BAY0017"],
@@ -106,19 +72,43 @@ real = {
     "figi": ["BBG000B9XRY4", "BBG000BLNNH6"],
     "lei": ["HWUPKR0MPOU8FGXBT394", "5493001KJTIIGC8Y1R12"],
 }
-checks = {
-    "cusip": lambda s: cusip_cd(s[:8]) == int(s[8]),
-    "isin": lambda s: isin_cd(s[:11]) == int(s[11]),
-    "sedol": lambda s: sedol_cd(s[:6]) == int(s[6]),
-    "figi": lambda s: figi_cd(s[:11]) == int(s[11]),
-    "lei": lei_valid,
-}
 for kind, values in real.items():
-    for v in values:
-        if not checks[kind](v):
-            raise SystemExit(f"REAL FIXTURE FAILED reference check: {kind} {v}")
     fixtures[kind] = values + fixtures[kind]
 
+verdicts = {k: [] for k in fixtures}
+for _ in range(400):
+    b = rs(AN + "*@#", 8)
+    c = b + cusip.calc_check_digit(b)
+    for v in [c, corrupt(c), b + rs(DIGITS, 1)]:
+        verdicts["cusip"].append({"value": v, "valid": cusip.is_valid(v)})
+
+    p = rs(AN[10:], 2) + rs(AN, 9)
+    i_ = p + isin.calc_check_digit(p)
+    for v in [i_, corrupt(i_), random.choice(["US", "GB", "XS"]) + rs(AN, 9) + rs(DIGITS, 1)]:
+        fmt = (len(v) == 12 and v[:2].isalpha() and all(ch in AN for ch in v) and v[11] in DIGITS
+               and isin.calc_check_digit(v[:11]) == v[11])
+        verdicts["isin"].append({"value": v, "valid": bool(fmt), "validCountry": isin.is_valid(v)})
+
+    b = random.choice([rs(DIGITS, 6), random.choice(CONSONANTS) + rs(DIGITS + CONSONANTS, 5),
+                       rs(DIGITS + CONSONANTS, 6)])
+    s_ = b + sedol.calc_check_digit(b)
+    for v in [s_, corrupt(s_)]:
+        verdicts["sedol"].append({"value": v, "valid": sedol.is_valid(v)})
+
+    b = random.choice([rs(CONSONANTS, 2), rs(CONSONANTS + DIGITS, 2), random.choice(sorted(FIGI_EXCLUDED))]) + \
+        random.choice(["G", "G", "G", rs(CONSONANTS, 1)]) + rs(CONSONANTS + DIGITS, 8)
+    f_ = b + figi.calc_check_digit(b)
+    for v in [f_, corrupt(f_)]:
+        verdicts["figi"].append({"value": v, "valid": figi.is_valid(v) and v[:2] not in FIGI_EXCLUDED})
+
+    b = rs(AN, 18)
+    l_ = b + mod_97_10.calc_check_digits(b)
+    for v in [l_, corrupt(l_), b + rs(DIGITS, 2)]:
+        verdicts["lei"].append({"value": v, "valid": lei.is_valid(v) and all(ch in DIGITS for ch in v[18:])})
+
+fixtures["verdicts"] = verdicts
+fixtures["_meta"] = {"generator": "test/generate-fixtures.py", "python-stdnum": stdnum.__version__}
 with open("test/fixtures.json", "w") as f:
     json.dump(fixtures, f, indent=1)
-print("wrote fixtures:", {k: len(v) for k, v in fixtures.items()})
+print("wrote fixtures:", {k: len(v) for k, v in fixtures.items() if k not in ("verdicts", "_meta")},
+      {k: len(v) for k, v in verdicts.items()})

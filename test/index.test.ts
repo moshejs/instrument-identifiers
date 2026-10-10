@@ -8,6 +8,7 @@ import {
   isValidFigi,
   isValidIsin,
   isValidLei,
+  isIsinCountryCode,
   isValidSedol,
   isinCheckDigit,
   leiCheckDigits,
@@ -122,7 +123,73 @@ describe("identify", () => {
   });
 });
 
-describe("cross-check against independent Python reference", () => {
+describe("verdicts match python-stdnum (with documented spec deviations)", () => {
+  const v = fixtures.verdicts;
+  it(`CUSIP (${v.cusip.length})`, () => {
+    for (const f of v.cusip) expect(isValidCusip(f.value), f.value).toBe(f.valid);
+  });
+  it(`ISIN (${v.isin.length}), with and without the country check`, () => {
+    for (const f of v.isin) {
+      expect(isValidIsin(f.value), f.value).toBe(f.valid);
+      expect(isValidIsin(f.value, { checkCountry: true }), f.value).toBe(f.validCountry);
+    }
+  });
+  it(`SEDOL (${v.sedol.length})`, () => {
+    for (const f of v.sedol) expect(isValidSedol(f.value), f.value).toBe(f.valid);
+  });
+  it(`FIGI (${v.figi.length})`, () => {
+    for (const f of v.figi) expect(isValidFigi(f.value), f.value).toBe(f.valid);
+  });
+  it(`LEI (${v.lei.length})`, () => {
+    for (const f of v.lei) expect(isValidLei(f.value), f.value).toBe(f.valid);
+  });
+});
+
+describe("format-rule regressions", () => {
+  it("FIGI provider prefix must be two consonants (was: digits accepted)", () => {
+    const base = "22G6VVYNTN0";
+    expect(isValidFigi(base + figiCheckDigit(base))).toBe(false);
+    const base2 = "B2G000B9XRY";
+    expect(isValidFigi(base2 + figiCheckDigit(base2))).toBe(false);
+    for (const prefix of ["GH", "KY", "BS", "VG"]) {
+      const b = `${prefix}G000B9XRY`;
+      expect(isValidFigi(b + figiCheckDigit(b)), prefix).toBe(false);
+    }
+  });
+
+  it("SEDOL with a leading digit must be all-numeric (was: 08458P8 accepted)", () => {
+    expect(isValidSedol("08458P8")).toBe(false);
+    expect(isValidSedol("0263494")).toBe(true);
+    expect(isValidSedol("B0YQ5W0")).toBe(true);
+  });
+
+  it("LEI check digits must be 02–98 (00/01 aliases rejected)", () => {
+    // Find a base whose correct check digits are 97/98: the 00/01 strings also
+    // have remainder 1 but can never be issued.
+    let base = "";
+    for (let i = 0; ; i++) {
+      base = `5493001KJTIIGC${String(i).padStart(4, "0")}`;
+      if (Number(leiCheckDigits(base)) >= 97) break;
+    }
+    const cd = Number(leiCheckDigits(base));
+    expect(isValidLei(base + String(cd))).toBe(true);
+    expect(isValidLei(base + String(cd - 97).padStart(2, "0"))).toBe(false);
+  });
+
+  it("ISIN country check is opt-in", () => {
+    const fake = "ZZ" + "000000000";
+    const isin = fake + isinCheckDigit(fake);
+    expect(isValidIsin(isin)).toBe(true);
+    expect(isValidIsin(isin, { checkCountry: true })).toBe(false);
+    expect(isValidIsin("XS0000000009".slice(0, 11) + isinCheckDigit("XS000000000"), { checkCountry: true })).toBe(true);
+    expect(isValidIsin("US0378331005", { checkCountry: true })).toBe(true);
+    expect(isIsinCountryCode("us")).toBe(true);
+    expect(isIsinCountryCode("XS")).toBe(true);
+    expect(isIsinCountryCode("ZZ")).toBe(false);
+  });
+});
+
+describe("cross-check against python-stdnum generated identifiers", () => {
   it(`validates all ${fixtures.cusip.length} CUSIP fixtures and their corruptions`, () => {
     for (const f of fixtures.cusip) {
       expect(isValidCusip(f), f).toBe(true);

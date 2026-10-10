@@ -26,17 +26,27 @@ Per identifier — `isValidX(value)`, `xCheckDigit(base)`, and where the structu
 | Identifier | Validate | Check digit | Parse | Convert |
 | --- | --- | --- | --- | --- |
 | CUSIP (9) | `isValidCusip` | `cusipCheckDigit(base8)` | `parseCusip` → issuer/issue | `cusipToIsin(cusip, cc?)` |
-| ISIN (12) | `isValidIsin` | `isinCheckDigit(payload11)` | `parseIsin` → country/NSIN | — |
+| ISIN (12) | `isValidIsin(v, { checkCountry? })` | `isinCheckDigit(payload11)` | `parseIsin` → country/NSIN | — |
 | SEDOL (7) | `isValidSedol` | `sedolCheckDigit(base6)` | — | `sedolToIsin(sedol, cc?)` |
 | FIGI (12) | `isValidFigi` | `figiCheckDigit(base11)` | `parseFigi` → prefix/id | — |
 | LEI (20) | `isValidLei` | `leiCheckDigits(base18)` | — | — |
 
-Plus **`identify(value)`** → every type the value validly matches. Inputs are case-insensitive; validators return booleans, everything else throws `RangeError` on malformed input. Format rules are enforced (FIGI's mandatory `G`, excluded country-like prefixes, SEDOL's no-vowels alphabet).
+Plus **`identify(value)`** → every type the value validly matches, and **`isIsinCountryCode(cc)`**. Inputs are case-insensitive and trimmed; validators return booleans, everything else throws `RangeError` on malformed input.
+
+Format rules enforced by the validators:
+
+- **FIGI**: a two-consonant provider prefix, excluding BS, BM, GG, GB, GH, KY and VG; `G` in position 3; no vowels.
+- **SEDOL**: no vowels. A SEDOL is either all-numeric (pre-2004) or starts with a letter.
+- **LEI**: two numeric check digits in the range ISO 7064 can produce (02–98).
+- **ISIN**: by default only the format and check digit are verified. Pass `{ checkCountry: true }` to also require an ISO 3166-1 alpha-2 code, or an ISIN-only prefix such as XS or EU.
+- **CUSIP**: `*`, `@` and `#` are accepted (as in PPNs).
+
+The check-digit functions (`xCheckDigit`) only check the character set of the base, not these structural rules.
 
 ## Correctness
 
-- Real-world anchors: Apple's CUSIP/ISIN/FIGI/LEI, a live US Treasury CUSIP, BAE's SEDOL→ISIN — each reproduced, not just validated.
-- Cross-checked against an **independent Python reference implementation** ([`test/generate-fixtures.py`](test/generate-fixtures.py)): 300+ generated identifiers per run, every one validated and its check digit recomputed, plus corruption tests (every fixture with a damaged check digit must fail).
+- Real-world anchors: Apple's CUSIP/ISIN/FIGI/LEI, a live US Treasury CUSIP, BAE's SEDOL→ISIN — each reproduced, not just validated. (The LEIs were confirmed with GLEIF and the Treasury CUSIP with TreasuryDirect.)
+- Cross-checked against **[python-stdnum](https://pypi.org/project/python-stdnum/)** ([`test/generate-fixtures.py`](test/generate-fixtures.py)): 500+ generated identifiers have their check digits recomputed, and 5,200 valid, random and corrupted strings are classified exactly as stdnum does. An audit run of 260,000 strings also agreed. There are three deliberate deviations where this package follows the primary spec: FIGI also excludes the GH and KY prefixes (OMG issue FIGI-6), LEI check digits must be numeric and in 02–98, and the ISIN country check is opt-in.
 
 ## Related
 
