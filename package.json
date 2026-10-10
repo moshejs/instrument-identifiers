@@ -1,6 +1,6 @@
 {
   "name": "instrument-identifiers",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Securities identifier math in one package — validate, parse, and compute check digits for CUSIP, ISIN, SEDOL, FIGI, and LEI, plus CUSIP→ISIN and SEDOL→ISIN conversion. Zero dependencies.",
   "keywords": [
     "cusip",
